@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"reflect"
 	"regexp"
 	"sort"
 	"time"
@@ -20,6 +21,10 @@ const (
 	DeviceIDRegexGroup   = "deviceid"
 	MetricNameRegexGroup = "metricname"
 )
+
+var MetricConfigDefaults = MetricConfig{
+	TopicPathFilter: MustNewRegexp(".*"),
+}
 
 var MQTTConfigDefaults = MQTTConfig{
 	Server:        "tcp://127.0.0.1:1883",
@@ -92,7 +97,7 @@ func MustNewRegexp(pattern string) *Regexp {
 
 type Config struct {
 	JsonParsing     *JsonParsingConfig `yaml:"json_parsing,omitempty"`
-	Metrics         []MetricConfig     `yaml:"metrics"`
+	Metrics         []BlockConfig      `yaml:"metrics"`
 	MQTT            *MQTTConfig        `yaml:"mqtt,omitempty"`
 	Cache           *CacheConfig       `yaml:"cache,omitempty"`
 	EnableProfiling bool               `yaml:"enable_profiling_metrics,omitempty"`
@@ -133,11 +138,13 @@ type MetricPerTopicConfig struct {
 }
 
 // Metrics Config is a mapping between a metric send on mqtt to a prometheus metric
+
 type MetricConfig struct {
 	PrometheusName     string                    `yaml:"prom_name"`
 	MQTTName           string                    `yaml:"mqtt_name"`
 	PayloadField       string                    `yaml:"payload_field"`
 	SensorNameFilter   Regexp                    `yaml:"sensor_name_filter"`
+	TopicPathFilter    *Regexp                   `yaml:"topic_path_filter"`
 	Help               string                    `yaml:"help"`
 	ValueType          string                    `yaml:"type"`
 	OmitTimestamp      bool                      `yaml:"omit_timestamp"`
@@ -148,8 +155,12 @@ type MetricConfig struct {
 	DynamicLabels      map[string]string         `yaml:"dynamic_labels"`
 	StringValueMapping *StringValueMappingConfig `yaml:"string_value_mapping"`
 	MQTTValueScale     float64                   `yaml:"mqtt_value_scale"`
-	// ErrorValue is used while error during value parsing
 	ErrorValue         *float64                  `yaml:"error_value"`
+}
+
+type BlockConfig struct {
+	SharedValues MetricConfig   `yaml:"shared"`
+	Metrics      []MetricConfig `yaml:"metrics"`
 }
 
 // StringValueMappingConfig defines the mapping from string to float
@@ -196,6 +207,7 @@ func LoadConfig(configFile string, logger *zap.Logger) (Config, error) {
 	if err = yaml.UnmarshalStrict(configData, &cfg); err != nil {
 		return cfg, err
 	}
+
 	if cfg.MQTT == nil {
 		cfg.MQTT = &MQTTConfigDefaults
 	}
@@ -221,10 +233,6 @@ func LoadConfig(configFile string, logger *zap.Logger) (Config, error) {
 		return Config{}, fmt.Errorf("device id regex %q does not contain required regex group %q", cfg.MQTT.DeviceIDRegex.pattern, DeviceIDRegexGroup)
 	}
 
-	if cfg.MQTT.ObjectPerTopicConfig != nil && cfg.MQTT.MetricPerTopicConfig != nil {
-		return Config{}, fmt.Errorf("only one of object_per_topic_config and metric_per_topic_config can be specified")
-	}
-
 	if cfg.MQTT.ObjectPerTopicConfig == nil && cfg.MQTT.MetricPerTopicConfig == nil {
 		cfg.MQTT.ObjectPerTopicConfig = &ObjectPerTopicConfig{
 			Encoding: EncodingJSON,
@@ -243,22 +251,47 @@ func LoadConfig(configFile string, logger *zap.Logger) (Config, error) {
 		}
 	}
 
+	for _, metric := range cfg.Metrics {
+		targets := metric.Metrics
+		sources := []MetricConfig{metric.SharedValues, MetricConfigDefaults}
+		for _, source := range sources {
+			for i := range targets {
+				tgt := reflect.ValueOf(&targets[i]).Elem()
+				src := reflect.ValueOf(&source).Elem()
+				for i := 0; i < src.NumField(); i++ {
+					dstField := tgt.FieldByName(src.Type().Field(i).Name)
+					if dstField.IsValid() && dstField.CanSet() && dstField.IsZero() &&
+						dstField.Type() == src.Field(i).Type() && !src.Field(i).IsZero() {
+						dstField.Set(src.Field(i))
+					}
+				}
+			}
+		}
+	}
+
 	// If any metric forces monotonicy, we need a state directory.
 	forcesMonotonicy := false
-	for _, m := range cfg.Metrics {
-		if m.ForceMonotonicy {
-			forcesMonotonicy = true
-		}
-
-		if m.StringValueMapping != nil && m.StringValueMapping.ErrorValue != nil {
-			if m.ErrorValue != nil {
-				return Config{}, fmt.Errorf("metric %s/%s: cannot set both string_value_mapping.error_value and error_value (string_value_mapping.error_value is deprecated).", m.MQTTName, m.PrometheusName)
+	for _, blocks := range cfg.Metrics {
+		for i, m := range blocks.Metrics {
+			if m.ForceMonotonicy {
+				forcesMonotonicy = true
 			}
-			logger.Warn("string_value_mapping.error_value is deprecated: please use error_value at the metric level.", zap.String("prometheusName", m.PrometheusName), zap.String("MQTTName", m.MQTTName))
-		}
 
-		if m.Expression != "" && m.RawExpression != ""  {
-			return Config{}, fmt.Errorf("metric %s/%s: expression and raw_expression are mutually exclusive.", m.MQTTName, m.PrometheusName)
+			if m.StringValueMapping != nil && m.StringValueMapping.ErrorValue != nil {
+				if m.ErrorValue != nil {
+					return Config{}, fmt.Errorf("metric %s/%s: cannot set both string_value_mapping.error_value and error_value (string_value_mapping.error_value is deprecated).", m.MQTTName, m.PrometheusName)
+				}
+				logger.Warn("string_value_mapping.error_value is deprecated: please use error_value at the metric level.", zap.String("prometheusName", m.PrometheusName), zap.String("MQTTName", m.MQTTName))
+			}
+
+			// Default for omitted MQTTName
+			if m.MQTTName == "" {
+				blocks.Metrics[i].MQTTName = m.PrometheusName
+			}
+
+			if m.Expression != "" && m.RawExpression != "" {
+				return Config{}, fmt.Errorf("metric %s/%s: expression and raw_expression are mutually exclusive.", m.MQTTName, m.PrometheusName)
+			}
 		}
 	}
 	if forcesMonotonicy {

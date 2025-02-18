@@ -131,6 +131,7 @@ func main() {
 	if err != nil {
 		logger.Fatal("could not setup a metric extractor", zap.Error(err))
 	}
+
 	ingest := metrics.NewIngest(collector, extractor, cfg.MQTT.DeviceIDRegex)
 	mqttClientOptions.SetOnConnectHandler(ingest.OnConnectHandler)
 	mqttClientOptions.SetConnectionLostHandler(ingest.ConnectionLostHandler)
@@ -238,12 +239,12 @@ func setupExtractor(cfg config.Config) (metrics.Extractor, error) {
 	if cfg.MQTT.ObjectPerTopicConfig != nil {
 		switch cfg.MQTT.ObjectPerTopicConfig.Encoding {
 		case config.EncodingJSON:
-			return metrics.NewJSONObjectExtractor(parser), nil
+			return metrics.NewJSONObjectExtractor(parser, cfg.MQTT.MetricPerTopicConfig.MetricNameRegex), nil
 		default:
 			return nil, fmt.Errorf("unsupported object format: %s", cfg.MQTT.ObjectPerTopicConfig.Encoding)
 		}
 	}
-	if cfg.MQTT.MetricPerTopicConfig != nil {
+	if cfg.MQTT.MetricPerTopicConfig.MetricNameRegex != nil {
 		return metrics.NewMetricPerTopicExtractor(parser, cfg.MQTT.MetricPerTopicConfig.MetricNameRegex), nil
 	}
 	return nil, fmt.Errorf("no extractor configured")

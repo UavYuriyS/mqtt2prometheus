@@ -20,20 +20,36 @@ func metricID(topic, metric, deviceID, promName string) string {
 	return fmt.Sprintf("%s-%s-%s-%s", deviceID, topic, metric, promName)
 }
 
-func NewJSONObjectExtractor(p Parser) Extractor {
+func NewJSONObjectExtractor(p Parser, metricNameRegex *config.Regexp) Extractor {
 	return func(topic string, payload []byte, deviceID string) (MetricCollection, error) {
 		var mc MetricCollection
 		parsed := gojsonq.New(gojsonq.SetSeparator(p.separator)).FromString(string(payload))
-
 		for path := range p.config() {
+			rawPayload := parsed.Get()
 			rawValue := parsed.Find(path)
 			parsed.Reset()
+
+			_, ok := rawPayload.(map[string]interface{})
+			// Handle lone values too
+			if !ok && metricNameRegex != nil {
+				rawValue = rawPayload
+				path = metricNameRegex.GroupValue(topic, config.MetricNameRegexGroup)
+				if path == "" {
+					return nil, fmt.Errorf("failed to find valid metric in topic path")
+				}
+			}
+
 			if rawValue == nil {
 				continue
 			}
 
 			// Find all valid metric configs
 			for _, config := range p.findMetricConfigs(path, deviceID) {
+
+				if !config.TopicPathFilter.Match(topic) {
+					continue
+				}
+
 				id := metricID(topic, path, deviceID, config.PrometheusName)
 				m, err := p.parseMetric(config, id, rawValue)
 				if err != nil {

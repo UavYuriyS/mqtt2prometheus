@@ -147,162 +147,162 @@ The config file can look like this:
 
 ```yaml
 mqtt:
- # The MQTT broker to connect to
- server: tcp://127.0.0.1:1883
- # Optional: Username and Password for authenticating with the MQTT Server
- user: bob
- password: happylittleclouds
- # Optional: for TLS client certificates
- ca_cert: certs/AmazonRootCA1.pem
- client_cert: certs/xxxxx-certificate.pem.crt
- client_key: certs/xxxxx-private.pem.key
- # Optional: Used to specify ClientID. The default is <hostname>-<pid>
- client_id: somedevice
- # The Topic path to subscribe to. Be aware that you have to specify the wildcard, if you want to follow topics for multiple sensors.
- topic_path: v1/devices/me/+
- # Optional: Regular expression to extract the device ID from the topic path. The default regular expression, assumes
- # that the last "element" of the topic_path is the device id.
- # The regular expression must contain a named capture group with the name deviceid
- # For example the expression for tasamota based sensors is "tele/(?P<deviceid>.*)/.*"
- device_id_regex: "(.*/)?(?P<deviceid>.*)"
- # The MQTT QoS level
- qos: 0
- # NOTE: Only one of metric_per_topic_config or object_per_topic_config should be specified in the configuration
- # Optional: Configures mqtt2prometheus to expect a single metric to be published as the value on an mqtt topic.
- metric_per_topic_config:
+  # The MQTT broker to connect to
+  server: tcp://127.0.0.1:1883
+  # Optional: Username and Password for authenticating with the MQTT Server
+  user: bob
+  password: happylittleclouds
+  # Optional: for TLS client certificates
+  ca_cert: certs/AmazonRootCA1.pem
+  client_cert: certs/xxxxx-certificate.pem.crt
+  client_key: certs/xxxxx-private.pem.key
+  # Optional: Used to specify ClientID. The default is <hostname>-<pid>
+  client_id: somedevice
+  # The Topic path to subscribe to. Be aware that you have to specify the wildcard, if you want to follow topics for multiple sensors.
+  topic_path: v1/devices/me/+
+  # Optional: Regular expression to extract the device ID from the topic path. The default regular expression, assumes
+  # that the last "element" of the topic_path is the device id.
+  # The regular expression must contain a named capture group with the name deviceid
+  # For example the expression for tasamota based sensors is "tele/(?P<deviceid>.*)/.*"
+  device_id_regex: "(.*/)?(?P<deviceid>.*)"
+  # The MQTT QoS level
+  qos: 0
+  # Optional: Configures mqtt2prometheus to expect a single metric to be published as the value on an mqtt topic.
   # A regex used for extracting the metric name from the topic. Must contain a named group for `metricname`.
+  # Can be used together with `object_per_topic_config` - it will be used if the topic value is not a JSON
   metric_name_regex: "(.*/)?(?P<metricname>.*)"
- # Optional: Configures mqtt2prometheus to expect an object containing multiple metrics to be published as the value on an mqtt topic.
- # This is the default.
- object_per_topic_config:
-  # The encoding of the object, currently only json is supported
-  encoding: JSON
+  # Optional: Configures mqtt2prometheus to expect an object containing multiple metrics to be published as the value on an mqtt topic.
+  # This is the default.
+  object_per_topic_config:
+    # The encoding of the object, currently only json is supported
+    encoding: JSON
 cache:
- # Timeout. Each received metric will be presented for this time if no update is send via MQTT.
- # Set the timeout to -1 to disable the deletion of metrics from the cache. The exporter presents the ingest timestamp
- # to prometheus.
- timeout: 24h
- # Path to the directory to keep the state for monotonic metrics.
- state_directory: "/var/lib/mqtt2prometheus"
+  # Timeout. Each received metric will be presented for this time if no update is send via MQTT.
+  # Set the timeout to -1 to disable the deletion of metrics from the cache. The exporter presents the ingest timestamp
+  # to prometheus.
+  timeout: 24h
+  # Path to the directory to keep the state for monotonic metrics.
+  state_directory: "/var/lib/mqtt2prometheus"
 json_parsing:
- # Separator. Used to split path to elements when accessing json fields.
- # You can access json fields with dots in it. F.E. {"key.name": {"nested": "value"}}
- # Just set separator to -> and use key.name->nested as mqtt_name
- separator: .
+  # Separator. Used to split path to elements when accessing json fields.
+  # You can access json fields with dots in it. F.E. {"key.name": {"nested": "value"}}
+  # Just set separator to -> and use key.name->nested as mqtt_name
+  separator: .
 # This is a list of valid metrics. Only metrics listed here will be exported
 metrics:
- # The name of the metric in prometheus
- - prom_name: temperature
-  # The name of the metric in a MQTT JSON message
-   mqtt_name: temperature
-  # The prometheus help text for this metric
-   help: DHT22 temperature reading
-  # The prometheus type for this metric. Valid values are: "gauge" and "counter"
-   type: gauge
-  # A map of string to string for constant labels. This labels will be attached to every prometheus metric
-   const_labels:
-    sensor_type: dht22
-  # A map of string to expression for dynamic labels. This labels will be attached to every prometheus metric
-  # expression will be executed for each label every time a metric is processed
-  # dynamic_labels:
-  #  raw_value: "raw_value"
-  # The name of the metric in prometheus
- - prom_name: humidity
-  # The name of the metric in a MQTT JSON message
-   mqtt_name: humidity
-  # The scale of the metric in a MQTT JSON message (prom_value = mqtt_value * scale)
-   mqtt_value_scale: 100
-  # The prometheus help text for this metric
-   help: DHT22 humidity reading
-  # The prometheus type for this metric. Valid values are: "gauge" and "counter"
-   type: gauge
-  # A map of string to string for constant labels. This labels will be attached to every prometheus metric
-   const_labels:
-    sensor_type: dht22
-  # The name of the metric in prometheus
- - prom_name: heat_index
-  # The path of the metric in a MQTT JSON message
-   mqtt_name: computed.heat_index
-  # The prometheus help text for this metric
-   help: DHT22 heatIndex calculation
-  # The prometheus type for this metric. Valid values are: "gauge" and "counter"
-   type: gauge
-  # A map of string to string for constant labels. This labels will be attached to every prometheus metric
-   const_labels:
-    sensor_type: dht22
-  # The name of the metric in prometheus
- - prom_name: state
-  # The name of the metric in a MQTT JSON message
-   mqtt_name: state
-  # Regular expression to only match sensors with the given name pattern
-   sensor_name_filter: "^.*-light$"
-  # The prometheus help text for this metric
-   help: Light state
-  # The prometheus type for this metric. Valid values are: "gauge" and "counter"
-   type: gauge
-  # according to prometheus exposition format timestamp is not mandatory, we can omit it if the reporting from the sensor is sporadic
-   omit_timestamp: true
-  # A map of string to string for constant labels. This labels will be attached to every prometheus metric
-   const_labels:
-    sensor_type: ikea
-  # When specified, metric value to use if a value cannot be parsed (match cannot be found in the map above, invalid float parsing, expression fails, ...)
-  # If not specified, parsing error will occur.
-  error_value: 1
-  # When specified, enables mapping between string values to metric values.
-   string_value_mapping:
-    # A map of string to metric value.
-    map:
-     off: 0
-     low: 0
-  # The name of the metric in prometheus
- - prom_name: total_light_usage_seconds
-  # The name of the metric in a MQTT JSON message
-   mqtt_name: state
-  # Regular expression to only match sensors with the given name pattern
-   sensor_name_filter: "^.*-light$"
-  # The prometheus help text for this metric
-   help: Total time the light was on, in seconds
-  # The prometheus type for this metric. Valid values are: "gauge" and "counter"
-   type: counter
-  # according to prometheus exposition format timestamp is not mandatory, we can omit it if the reporting from the sensor is sporadic
-   omit_timestamp: true
-  # A map of string to string for constant labels. This labels will be attached to every prometheus metric
-   const_labels:
-    sensor_type: ikea
-  # Metric value to use if a value cannot be parsed (match cannot be found in the map above, invalid float parsing, ...)
-  # If not specified, parsing error will occur.
-  error_value: 1
-  # When specified, enables mapping between string values to metric values.
-   string_value_mapping:
-    # A map of string to metric value.
-    map:
-     off: 0
-     low: 0
-  # Sum up the time the light is on, see the section "Expressions" below.
-  expression: "value > 0 ? last_result + elapsed.Seconds() : last_result"
-  # The name of the metric in prometheus
- - prom_name: total_energy
-  # The name of the metric in a MQTT JSON message
-   mqtt_name: aenergy.total
-  # Regular expression to only match sensors with the given name pattern
-   sensor_name_filter: "^shellyplus1pm-.*$"
-  # The prometheus help text for this metric
-   help: Total energy used
-  # The prometheus type for this metric. Valid values are: "gauge" and "counter"
-   type: counter
-  # This setting requires an almost monotonic counter as the source. When monotonicy is enforced, the metric value is regularly written to disk. Thus, resets in the source counter can be detected and corrected by adding an offset as if the reset did not happen. The result is a true monotonic increasing time series, like an ever growing counter.
-   force_monotonicy: true
- - prom_name: linky_time
-  # The name of the metric in a MQTT JSON message
-   mqtt_name: linky_current_date
-  # Regular expression to only match sensors with the given name pattern
-   sensor_name_filter: "^linky.*$"
-  # The prometheus help text for this metric
-   help: current unix timestamp from linky
-  # The prometheus type for this metric. Valid values are: "gauge" and "counter"
-   type: gauge
-  # convert dynamic datetime string to unix timestamp
-   raw_expression: 'date(string(raw_value), "H060102150405", "Europe/Paris").Unix()'
+  - shared:
+      # Set metric fields for all metrics in the metrics block below
+      type: gauge
+    metrics:
+      # The name of the metric in prometheus
+      - prom_name: temperature
+        # The name of the metric in a MQTT JSON message
+        mqtt_name: temperature
+        # The prometheus help text for this metric
+        help: DHT22 temperature reading
+        # A map of string to string for constant labels. This labels will be attached to every prometheus metric
+        const_labels:
+          sensor_type: dht22
+        # Apply this metric only to certain topic paths. If this regex matches, an extraction will be attempted
+        topic_path_filter: ".*status"
+      # A map of string to expression for dynamic labels. This labels will be attached to every prometheus metric
+      # expression will be executed for each label every time a metric is processed
+      # dynamic_labels:
+      #  raw_value: "raw_value"
+      # The name of the metric in prometheus
+      - prom_name: humidity
+        # The name of the metric in a MQTT JSON message can be omitted. In this case it will be set to prom_name
+        # The scale of the metric in a MQTT JSON message (prom_value = mqtt_value * scale)
+        mqtt_value_scale: 100
+        # The prometheus help text for this metric
+        help: DHT22 humidity reading
+        # A map of string to string for constant labels. This labels will be attached to every prometheus metric
+        const_labels:
+          sensor_type: dht22
+      # The name of the metric in prometheus
+      - prom_name: heat_index
+        # The path of the metric in a MQTT JSON message
+        mqtt_name: computed.heat_index
+        # The prometheus help text for this metric
+        help: DHT22 heatIndex calculation
+        # A map of string to string for constant labels. This labels will be attached to every prometheus metric
+        const_labels:
+          sensor_type: dht22
+      # The name of the metric in prometheus
+      - prom_name: state
+        # A map of string to string for constant labels. This labels will be attached to every prometheus metric
+        # Regular expression to only match sensors with the given name pattern
+        sensor_name_filter: "^.*-light$"
+        # The prometheus help text for this metric
+        help: Light state
+        # according to prometheus exposition format timestamp is not mandatory, we can omit it if the reporting from the sensor is sporadic
+        omit_timestamp: true
+        # A map of string to string for constant labels. This labels will be attached to every prometheus metric
+        const_labels:
+          sensor_type: ikea
+        # When specified, metric value to use if a value cannot be parsed (match cannot be found in the map above, invalid float parsing, expression fails, ...)
+        # If not specified, parsing error will occur.
+        error_value: 1
+        # When specified, enables mapping between string values to metric values.
+        string_value_mapping:
+          # A map of string to metric value.
+          map:
+            off: 0
+            low: 0
+
+
+      # The name of the metric in prometheus
+      - prom_name: total_light_usage_seconds
+        # The name of the metric in a MQTT JSON message
+        mqtt_name: state
+        # Regular expression to only match sensors with the given name pattern
+        sensor_name_filter: "^.*-light$"
+        # The prometheus help text for this metric
+        help: Total time the light was on, in seconds
+        # The prometheus type for this metric. Valid values are: "gauge" and "counter"
+        type: counter
+        # according to prometheus exposition format timestamp is not mandatory, we can omit it if the reporting from the sensor is sporadic
+        omit_timestamp: true
+        # A map of string to string for constant labels. This labels will be attached to every prometheus metric
+        const_labels:
+          sensor_type: ikea
+        # Metric value to use if a value cannot be parsed (match cannot be found in the map above, invalid float parsing, ...)
+        # If not specified, parsing error will occur.
+        error_value: 1
+        # When specified, enables mapping between string values to metric values.
+        string_value_mapping:
+          # A map of string to metric value.
+          map:
+            off: 0
+            low: 0
+        # Sum up the time the light is on, see the section "Expressions" below.
+        expression: "value > 0 ? last_result + elapsed.Seconds() : last_result"
+      # The name of the metric in prometheus
+      - prom_name: total_energy
+        # The name of the metric in a MQTT JSON message
+        mqtt_name: aenergy.total
+        # Regular expression to only match sensors with the given name pattern
+        sensor_name_filter: "^shellyplus1pm-.*$"
+        # The prometheus help text for this metric
+        help: Total energy used
+        # The prometheus type for this metric. Valid values are: "gauge" and "counter"
+        # This will override default from the shared block
+        type: counter
+        # This setting requires an almost monotonic counter as the source. When monotonicy is enforced, the metric value is regularly written to disk. Thus, resets in the source counter can be detected and corrected by adding an offset as if the reset did not happen. The result is a true monotonic increasing time series, like an ever growing counter.
+        force_monotonicy: true
+  # Shared block could be omitted
+  - metrics:
+      - prom_name: linky_time
+        # The name of the metric in a MQTT JSON message
+        mqtt_name: linky_current_date
+        # Regular expression to only match sensors with the given name pattern
+        sensor_name_filter: "^linky.*$"
+        # The prometheus help text for this metric
+        help: current unix timestamp from linky
+        # The prometheus type for this metric. Valid values are: "gauge" and "counter"
+        type: gauge
+        # convert dynamic datetime string to unix timestamp
+        raw_expression: 'date(string(raw_value), "H060102150405", "Europe/Paris").Unix()'
 ```
 
 ### Environment Variables
@@ -393,7 +393,8 @@ The `last_value`, `last_result`, and the timestamp of the last evaluation are re
 #### Evaluation Order
 
 It is important to understand the sequence of transformations from a sensor input to the final output which is exported to Prometheus. The steps are as follows:
-
+If `shared` block is present, values there are transferred over to metrics config in `metrics` block
+Values set in `metrics` block take precedence over `share` ones
 If `raw_expression` is set, the generated value of the expression is exported to Prometheus. Otherwise:
 1. The sensor input is converted to a number. If a `string_value_mapping` is configured, it is consulted for the conversion.
 1. If an `expression` is configured, it is evaluated using the converted number. The result of the evaluation replaces the converted sensor value.

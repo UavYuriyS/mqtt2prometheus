@@ -148,11 +148,13 @@ func defaultExprEnv() map[string]interface{} {
 	}
 }
 
-func NewParser(metrics []config.MetricConfig, separator, stateDir string) Parser {
+func NewParser(metric []config.BlockConfig, separator, stateDir string) Parser {
 	cfgs := make(map[string][]*config.MetricConfig)
-	for i := range metrics {
-		key := metrics[i].MQTTName
-		cfgs[key] = append(cfgs[key], &metrics[i])
+	for _, metrics := range metric {
+		for i := range metrics.Metrics {
+			key := metrics.Metrics[i].MQTTName
+			cfgs[key] = append(cfgs[key], &metrics.Metrics[i])
+		}
 	}
 	return Parser{
 		separator:     separator,
@@ -209,7 +211,7 @@ func (p *Parser) parseMetric(cfg *config.MetricConfig, metricID string, value in
 				if ok {
 					metricValue = floatValue
 
-				// deprecated, replaced by ErrorValue from the upper level
+					// deprecated, replaced by ErrorValue from the upper level
 				} else if cfg.StringValueMapping.ErrorValue != nil {
 					metricValue = *cfg.StringValueMapping.ErrorValue
 				} else if cfg.ErrorValue != nil {
@@ -390,24 +392,23 @@ func (p *Parser) evalExpressionValue(metricID, code string, raw_value interface{
 	}
 	if ms.program == nil {
 		ms.env = defaultExprEnv()
+		// Update the environment
+		ms.env[env_raw_value] = raw_value
+		ms.env[env_value] = value
+		ms.env[env_last_value] = ms.dynamic.LastExprValue
+		ms.env[env_last_raw_value] = ms.dynamic.LastExprRawValue
+		ms.env[env_last_result] = ms.dynamic.LastExprResult
+		if ms.dynamic.LastExprTimestamp.IsZero() {
+			ms.env[env_elapsed] = time.Duration(0)
+		} else {
+			ms.env[env_elapsed] = now().Sub(ms.dynamic.LastExprTimestamp)
+		}
 		ms.program, err = expr.Compile(code, expr.Env(ms.env), expr.AsFloat64())
 		if err != nil {
 			return value, fmt.Errorf("failed to compile expression %q: %w", code, err)
 		}
 		// Trigger flushing the new state to disk.
 		ms.lastWritten = time.Time{}
-	}
-
-	// Update the environment
-	ms.env[env_raw_value] = raw_value
-	ms.env[env_value] = value
-	ms.env[env_last_value] = ms.dynamic.LastExprValue
-	ms.env[env_last_raw_value] = ms.dynamic.LastExprRawValue
-	ms.env[env_last_result] = ms.dynamic.LastExprResult
-	if ms.dynamic.LastExprTimestamp.IsZero() {
-		ms.env[env_elapsed] = time.Duration(0)
-	} else {
-		ms.env[env_elapsed] = now().Sub(ms.dynamic.LastExprTimestamp)
 	}
 
 	result, err := expr.Run(ms.program, ms.env)

@@ -38,10 +38,13 @@ type CacheItem struct {
 
 type MetricCollection []Metric
 
-func NewCollector(defaultTimeout time.Duration, possibleMetrics []config.MetricConfig, logger *zap.Logger) Collector {
+func NewCollector(defaultTimeout time.Duration, possibleMetrics []config.BlockConfig, logger *zap.Logger) Collector {
 	var descs []*prometheus.Desc
-	for _, m := range possibleMetrics {
-		descs = append(descs, m.PrometheusDescription())
+
+	for _, blocks := range possibleMetrics {
+		for _, m := range blocks.Metrics {
+			descs = append(descs, m.PrometheusDescription())
+		}
 	}
 	return &MemoryCachedCollector{
 		cache:        gocache.New(defaultTimeout, defaultTimeout*10),

@@ -1,6 +1,6 @@
 mqtt:
   # The MQTT broker to connect to
-  server: tcp://127.0.0.1:1883
+  server: tcp://10.42.0.226:1883
   # Optional: Username and Password for authenticating with the MQTT Server
   # user: bob
   # password: happylittleclouds
@@ -11,13 +11,20 @@ mqtt:
   # Optional: Used to specify ClientID. The default is <hostname>-<pid>
   # client_id: somedevice
   # The Topic path to subscribe to. Be aware that you have to specify the wildcard.
-  topic_path: v1/devices/me/+
+  #topic_path: ice_runner/raspberry_pi/#
+  topic_path: ice_runner/raspberry_pi/+/#
   # Optional: Regular expression to extract the device ID from the topic path. The default regular expression, assumes
   # that the last "element" of the topic_path is the device id.
   # The regular expression must contain a named capture group with the name deviceid
   # For example the expression for tasamota based sensors is "tele/(?P<deviceid>.*)/.*"
-  # device_id_regex: "(.*/)?(?P<deviceid>.*)"
+  device_id_regex: "ice_runner/raspberry_pi/(?P<deviceid>[^/]*)/.*"
+  object_per_topic_config:
+  # The encoding of the object, currently only json is supported
+    encoding: JSON
   # The MQTT QoS level
+  metric_per_topic_config:
+  # A regex used for extracting the metric name from the topic. Must contain a named group for `metricname`.
+    metric_name_regex: "(?P<metricname>[^/]+)$"
   qos: 0
 # Export internal profiling metrics including CPU, Memory, uptime, open file
 # descriptors, as well as metrics exported by Go runtime such as information about
@@ -27,7 +34,9 @@ cache:
   # Timeout. Each received metric will be presented for this time if no update is send via MQTT.
   # Set the timeout to -1 to disable the deletion of metrics from the cache. The exporter presents the ingest timestamp
   # to prometheus.
-  timeout: 24h
+  timeout: 5m
+  state_directory: "./"
+
 json_parsing:
   # Separator. Used to split path to elements when accessing json fields.
   # You can access json fields with dots in it. F.E. {"key.name": {"nested": "value"}}
@@ -35,58 +44,120 @@ json_parsing:
   separator: .
 # This is a list of valid metrics. Only metrics listed here will be exported
 metrics:
-    # The name of the metric in prometheus
-  - prom_name: temperature
-    # The name of the metric in a MQTT JSON message
-    mqtt_name: temperature
-    # The prometheus help text for this metric
-    help: DHT22 temperature reading
-    # The prometheus type for this metric. Valid values are: "gauge" and "counter"
-    type: gauge
-    # A map of string to string for constant labels. This labels will be attached to every prometheus metric
-    const_labels:
-      sensor_type: dht22
-    # The name of the metric in prometheus
-  - prom_name: humidity
-    # The name of the metric in a MQTT JSON message
-    mqtt_name: humidity
-    # The prometheus help text for this metric
-    help: DHT22 humidity reading
-    # The prometheus type for this metric. Valid values are: "gauge" and "counter"
-    type: gauge
-    # A map of string to string for constant labels. This labels will be attached to every prometheus metric
-    const_labels:
-      sensor_type: dht22
-    # The name of the metric in prometheus
-  - prom_name: heat_index
-    # The name of the metric in a MQTT JSON message
-    mqtt_name: heat_index
-    # The prometheus help text for this metric
-    help: DHT22 heatIndex calculation
-    # The prometheus type for this metric. Valid values are: "gauge" and "counter"
-    type: gauge
-    # A map of string to string for constant labels. This labels will be attached to every prometheus metric
-    const_labels:
-      sensor_type: dht22
-    # The name of the metric in prometheus
-  - prom_name: state
-    # The name of the metric in a MQTT JSON message
-    mqtt_name: state
-    # Regular expression to only match sensors with the given name pattern
-    sensor_name_filter: "^.*-light$"
-    # The prometheus help text for this metric
-    help: Light state
-    # The prometheus type for this metric. Valid values are: "gauge" and "counter"
-    type: gauge
-    # A map of string to string for constant labels. This labels will be attached to every prometheus metric
-    const_labels:
-      sensor_type: ikea
-    # Metric value to use if a value cannot be parsed (match cannot be found in the map above, invalid float parsing, ...)
-    # If not specified, parsing error will occur.
-    error_value: 1
-    # When specified, enables mapping between string values to metric values.
-    string_value_mapping:
-      # A map of string to metric value.
-      map:
-        off: 0
-        low: 0
+  - shared:
+    metrics:
+      - prom_name: state
+        help: ICE break-in jig state state
+        type: gauge
+        const_labels:
+          type: state
+        topic_path_filter: ".*state"
+
+  - shared:
+      type: gauge
+      const_labels:
+        type: status
+      topic_path_filter: ".*status"
+    # State
+    metrics:
+      # Status
+      - prom_name: ice_state
+        help: ICE current status NOT_CONNECTED -1 / STOPPED 0 / RUNNING 1 / WAITING 2 / FAULT 3
+        string_value_mapping:
+          map:
+            NOT_CONNECTED : -1
+            STOPPED: 0
+            RUNNING: 1
+            WAITING: 2
+            FAULT: 3
+
+      - prom_name: rpm
+        help: ICE current rpm
+
+      - prom_name: throttle
+        help: ICE current throttle
+
+      - prom_name: temperature
+        mqtt_name: temp
+        help: ICE current temperature
+
+      - prom_name: fuel_level
+        help: ICE current fuel level
+
+      - prom_name: fuel_level_percent
+        help: ICE current fuel percentage
+
+      - prom_name: gas_throttle
+        help: ICE current accelerator position
+
+      - prom_name: air_throttle
+        help: ICE current choke position
+
+      - prom_name: current
+        help: ICE current consumption
+
+      - prom_name: voltage_in
+        help: ICE current voltage (high side)
+
+      - prom_name: voltage_out
+        help: ICE current voltage (low side)
+
+      - prom_name: vibration
+        help: ICE current vibration metric
+
+      - prom_name: total_run_time
+        mqtt_name: engaged_time
+        help: ICE total run time
+
+      - prom_name: jig_state
+        mqtt_name: mode
+        help: ICE break-in jig current status
+        string_value_mapping:
+          map:
+            MODE_OPERATIONAL: 0
+            MODE_INITIALIZATION: 1
+            MODE_MAINTENANCE: 2
+            MODE_SOFTWARE_UPDATE: 3
+            MODE_OFFLINE: 7
+
+      - prom_name: jig_health
+        mqtt_name: health
+        help: ICE break-in jig current health status
+        string_value_mapping:
+          map:
+            HEALTH_OK: 0
+            HEALTH_WARNING: 1
+            HEALTH_ERROR: 2
+            HEALTH_CRITICAL: 3
+
+      - prom_name: rec_imu
+        help: Is IMU data recorded
+
+      - prom_name: start_time
+        help: ICE break-in start time
+        raw_expression: 'raw_value != "not started" ? date(value).Unix() : -1'
+
+      - prom_name: fuel_tank_status
+        mqtt_name: available_fuel_volume_percent
+        help: ICE fuel tank status
+
+  - shared:
+      topic_path_filter: ".*dronecan.*"
+      type: gauge
+      const_labels:
+        type: imu
+      mqtt_name: accelerometer_latest
+    metrics:
+    - prom_name: acceleration_x
+      help: ICE acceleration in x direction
+      raw_expression: "float(raw_value[0])"
+
+    - prom_name: acceleration_y
+      help: ICE acceleration in y direction
+      raw_expression: "float(raw_value[1])"
+
+    - prom_name: acceleration_z
+      help: ICE acceleration in z direction
+      raw_expression: "float(raw_value[2])"
+
+
